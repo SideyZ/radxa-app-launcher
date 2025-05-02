@@ -37,10 +37,10 @@ def launch_app(app_name, app_path):
         print(f"Kein start.sh in {app_path}")
         return
 
-    # Starte die App in einem neuen xterm-Fenster mit dem Ordnernamen als Fenstertitel
-    subprocess.Popen(['xterm', '-T', app_name, '-e', 'bash', start_script])
+    # Direkt starten – ohne Terminalfenster
+    subprocess.Popen(['bash', start_script])
     print(f"{app_name} wurde gestartet.")
-
+   
 # Erstelle den Launcher
 def create_launcher():
     root = tk.Tk()
