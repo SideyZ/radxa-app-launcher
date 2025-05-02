@@ -1,4 +1,5 @@
 import os
+import os
 import tkinter as tk
 from tkinter import PhotoImage
 from PIL import Image, ImageTk
@@ -9,48 +10,34 @@ APP_DIR = '/home/dietpi/app-launcher/apps/'
 LAUNCHER_TITLE = 'App Launcher'
 ICON_SIZE = (64, 64)
 
-running_apps = {}
+def activate_existing_window_by_class(window_class):
+    try:
+        window_ids = subprocess.check_output(['xdotool', 'search', '--class', window_class]).decode().splitlines()
+        if window_ids:
+            subprocess.Popen(['xdotool', 'windowactivate', window_ids[0]])
+            return True
+    except subprocess.CalledProcessError:
+        pass
+    return False
 
 def launch_app(app_name, app_path):
-    if app_name in running_apps:
-        pid = running_apps[app_name]['pid']
-        try:
-            os.kill(pid, 0)
-            window_name = running_apps[app_name]['window_name']
-            subprocess.Popen(['xdotool', 'search', '--name', window_name, 'windowactivate'])
-            return
-        except ProcessLookupError:
-            del running_apps[app_name]
+    # Prüfen ob window_class.txt vorhanden ist
+    window_class_file = os.path.join(app_path, 'window_class.txt')
+    if os.path.exists(window_class_file):
+        with open(window_class_file, 'r') as f:
+            window_class = f.read().strip()
+            if activate_existing_window_by_class(window_class):
+                print(f"{app_name} ist bereits aktiv, aktiviere Fenster...")
+                return
 
+    # Fallback: App starten
     start_script = os.path.join(app_path, 'start.sh')
     if not os.path.isfile(start_script):
         print(f"Kein start.sh in {app_path}")
         return
 
-    process = subprocess.Popen(['bash', start_script])
-    time.sleep(2)
-
-    try:
-        output = subprocess.check_output(['wmctrl', '-lp']).decode()
-        window_id = None
-        for line in output.splitlines():
-            if str(process.pid) in line:
-                parts = line.split()
-                window_id = parts[0]
-                break
-
-        if window_id:
-            win_name = subprocess.check_output(['xdotool', 'getwindowname', window_id]).decode().strip()
-        else:
-            win_name = app_name
-
-        running_apps[app_name] = {
-            'pid': process.pid,
-            'window_name': win_name
-        }
-
-    except Exception as e:
-        print(f"Fehler beim Fenster-Fokus: {e}")
+    subprocess.Popen(['bash', start_script])
+    print(f"{app_name} wurde gestartet.")
 
 def create_launcher():
     root = tk.Tk()
@@ -96,3 +83,4 @@ def create_launcher():
 
 if __name__ == "__main__":
     create_launcher()
+
