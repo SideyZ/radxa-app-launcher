@@ -1,71 +1,98 @@
 import os
-import subprocess
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import PhotoImage
 from PIL import Image, ImageTk
+import subprocess
+import time
 
-APP_DIR = "/home/dietpi/app-launcher/apps"
+APP_DIR = '/home/dietpi/app-launcher/apps/'
+LAUNCHER_TITLE = 'App Launcher'
+ICON_SIZE = (64, 64)
 
-class AppLauncher(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("App Launcher")
-        self.configure(bg="black")
+running_apps = {}
 
-        # Vollbild aktivieren
-        self.attributes("-fullscreen", True)
-        self.bind("<Escape>", lambda e: self.destroy())  # ESC zum Beenden
-
-        self.icon_size = (64, 64)
-        self.default_icon = self.create_default_icon()
-
-        self.load_apps()
-
-    def create_default_icon(self):
-        """Erzeugt ein graues Platzhalterbild."""
-        img = Image.new("RGB", self.icon_size, color="gray")
-        return ImageTk.PhotoImage(img)
-
-    def load_apps(self):
-        row = 0
-        column = 0
-
-        for app_name in sorted(os.listdir(APP_DIR)):
-            app_path = os.path.join(APP_DIR, app_name)
-            start_script = os.path.join(app_path, "start.sh")
-
-            if not os.path.isfile(start_script) or not os.access(start_script, os.R_OK):
-                continue  # Startskript muss vorhanden und lesbar sein
-
-            icon = self.default_icon
-            icon_path = os.path.join(app_path, "icon.png")
-            if os.path.isfile(icon_path):
-                try:
-                    img = Image.open(icon_path)
-                    img = img.resize(self.icon_size, Image.ANTIALIAS)
-                    icon = ImageTk.PhotoImage(img)
-                except Exception as e:
-                    print(f"[WARNUNG] Fehler beim Laden von {icon_path}: {e}")
-
-            btn = tk.Button(self, image=icon, command=lambda p=start_script: self.launch_app(p), bg="black", borderwidth=0)
-            btn.image = icon
-            btn.grid(row=row, column=column, padx=10, pady=10)
-
-            lbl = tk.Label(self, text=app_name, fg="white", bg="black")
-            lbl.grid(row=row + 1, column=column)
-
-            column += 1
-            if column >= 4:
-                column = 0
-                row += 2
-
-    def launch_app(self, script_path):
-        """Startet die App im Hintergrund, ohne den Launcher zu blockieren."""
+def launch_app(app_name, app_path):
+    if app_name in running_apps:
+        pid = running_apps[app_name]['pid']
         try:
-            subprocess.Popen(["bash", script_path])  # App im Hintergrund starten
-        except Exception as e:
-            messagebox.showerror("Fehler", f"Kann App nicht starten:\n{e}")
+            os.kill(pid, 0)
+            window_name = running_apps[app_name]['window_name']
+            subprocess.Popen(['xdotool', 'search', '--name', window_name, 'windowactivate'])
+            return
+        except ProcessLookupError:
+            del running_apps[app_name]
+
+    start_script = os.path.join(app_path, 'start.sh')
+    if not os.path.isfile(start_script):
+        print(f"Kein start.sh in {app_path}")
+        return
+
+    process = subprocess.Popen(['bash', start_script])
+    time.sleep(2)
+
+    try:
+        output = subprocess.check_output(['wmctrl', '-lp']).decode()
+        window_id = None
+        for line in output.splitlines():
+            if str(process.pid) in line:
+                parts = line.split()
+                window_id = parts[0]
+                break
+
+        if window_id:
+            win_name = subprocess.check_output(['xdotool', 'getwindowname', window_id]).decode().strip()
+        else:
+            win_name = app_name
+
+        running_apps[app_name] = {
+            'pid': process.pid,
+            'window_name': win_name
+        }
+
+    except Exception as e:
+        print(f"Fehler beim Fenster-Fokus: {e}")
+
+def create_launcher():
+    root = tk.Tk()
+    root.attributes('-fullscreen', True)
+    root.title(LAUNCHER_TITLE)
+    root.configure(bg='black')
+
+    frame = tk.Frame(root, bg='black')
+    frame.pack(expand=True)
+
+    apps = [d for d in os.listdir(APP_DIR) if os.path.isdir(os.path.join(APP_DIR, d))]
+
+    col_count = 5
+    row = col = 0
+
+    for app in sorted(apps):
+        app_path = os.path.join(APP_DIR, app)
+        icon_path = os.path.join(app_path, 'icon.png')
+
+        if os.path.isfile(icon_path):
+            try:
+                img = Image.open(icon_path).resize(ICON_SIZE)
+                icon = ImageTk.PhotoImage(img)
+            except Exception as e:
+                print(f"Fehler beim Laden des Icons von {app}: {e}")
+                icon = None
+        else:
+            icon = None
+
+        def on_click(a=app, p=app_path):
+            launch_app(a, p)
+
+        btn = tk.Button(frame, text=app, image=icon, compound='top', command=on_click, bg='gray20', fg='white')
+        btn.image = icon  # Referenz halten
+        btn.grid(row=row, column=col, padx=20, pady=20)
+
+        col += 1
+        if col >= col_count:
+            col = 0
+            row += 1
+
+    root.mainloop()
 
 if __name__ == "__main__":
-    launcher = AppLauncher()
-    launcher.mainloop()
+    create_launcher()
