@@ -8,13 +8,13 @@ APP_DIR = '/home/dietpi/app-launcher/apps/'
 LAUNCHER_TITLE = 'App Launcher'
 ICON_SIZE = (64, 64)
 
-# Funktion zum Aktivieren eines bereits geöffneten Fensters mit einer bestimmten Fensterklasse
-def activate_existing_window_by_class(window_class):
+# Funktion zum Aktivieren eines bereits geöffneten Fensters basierend auf dem Fenstertitel
+def activate_existing_window_by_title(window_title):
     try:
-        # Finde das Fenster basierend auf der Klasse mit xdotool
-        window_ids = subprocess.check_output(['xdotool', 'search', '--class', window_class]).decode().splitlines()
+        # Finde das Fenster basierend auf dem Titel mit xdotool
+        window_ids = subprocess.check_output(['xdotool', 'search', '--name', window_title]).decode().splitlines()
         if window_ids:
-            subprocess.Popen(['xdotool', 'windowactivate', window_ids[0]])  # Aktiviert das erste gefundene Fenster
+            subprocess.Popen(['xdotool', 'windowactivate', window_ids[0]])  # Aktiviert das Fenster mit dem entsprechenden Titel
             return True
     except subprocess.CalledProcessError:
         pass
@@ -27,7 +27,7 @@ def launch_app(app_name, app_path):
     if os.path.exists(window_class_file):
         with open(window_class_file, 'r') as f:
             window_class = f.read().strip()
-            if activate_existing_window_by_class(window_class):
+            if activate_existing_window_by_title(app_name):  # Aktiviert Fenster anhand des App-Namens
                 print(f"{app_name} ist bereits aktiv, aktiviere Fenster...")
                 return  # Wenn die App bereits aktiv ist, nichts weiter tun
 
@@ -37,7 +37,8 @@ def launch_app(app_name, app_path):
         print(f"Kein start.sh in {app_path}")
         return
 
-    subprocess.Popen(['bash', start_script])
+    # Starte die App in einem neuen xterm-Fenster mit dem Ordnernamen als Fenstertitel
+    subprocess.Popen(['xterm', '-T', app_name, '-e', 'bash', start_script])
     print(f"{app_name} wurde gestartet.")
 
 # Erstelle den Launcher
@@ -90,4 +91,3 @@ def create_launcher():
 # Hauptfunktion, die den Launcher startet
 if __name__ == "__main__":
     create_launcher()
-
